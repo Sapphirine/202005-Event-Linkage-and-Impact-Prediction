@@ -9,7 +9,7 @@ Stock Price Prediction with BERT and XGBoost using Twitter data
 
 ### Speed Up Animation
 
-![image]https://github.com/Sapphirine/202005-Event-Linkage-and-Impact-Prediction/blob/master/demo/Stock%20Prediction%20Animation.gif)
+![image](https://github.com/Sapphirine/202005-Event-Linkage-and-Impact-Prediction/blob/master/demo/Stock%20Prediction%20Animation.gif)
 
 ## Prerequisites
 
