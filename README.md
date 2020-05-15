@@ -5,11 +5,11 @@ Stock Price Prediction with BERT and XGBoost using Twitter data
 
 ### Predicted New Price on One Day
 
-![image](https://github.com/Sapphirine/202005-Event-Linkage-and-Impact-Prediction/tree/master/demo/Predicted%20New%20Price.gif)
+![image](https://github.com/Sapphirine/202005-Event-Linkage-and-Impact-Prediction/blob/master/demo/Predicted%20New%20Price.gif)
 
 ### Speed Up Animation
 
-![image]https://github.com/Sapphirine/202005-Event-Linkage-and-Impact-Prediction/tree/master/demo/Stock%20Prediction%20Animation.gif)
+![image]https://github.com/Sapphirine/202005-Event-Linkage-and-Impact-Prediction/blob/master/demo/Stock%20Prediction%20Animation.gif)
 
 ## Prerequisites
 
@@ -80,7 +80,7 @@ See [RELEASE NOTES](RELEASE_NOTES.md) file.
 
 # License
 
-See [MIT LICENSE](https://github.com/frostace/Event-Linkage-and-Impact-Prediction/blob/master/LICENSE) file.
+See [MIT LICENSE](https://github.com/Sapphirine/202005-Event-Linkage-and-Impact-Prediction/blob/master/LICENSE) file.
 
 # Contact
 
