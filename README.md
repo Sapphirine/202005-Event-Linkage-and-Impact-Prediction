@@ -1,5 +1,5 @@
 # 202005-Event-Linkage-and-Impact-Prediction
-Stock Price Prediction with BERT and XGBoost using Twitter data
+[Stock Price Prediction with BERT and XGBoost using Twitter data](https://github.com/Sapphirine/202005-Event-Linkage-and-Impact-Prediction/blob/master/B3-ELIP-ch3470-sx2257.pdf)
 
 ## Demo
 
