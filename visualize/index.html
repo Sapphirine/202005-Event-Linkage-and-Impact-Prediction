@@ -1,0 +1,903 @@
+<!DOCTYPE html>
+<style>
+    /* set the CSS */
+    .grid {
+        stroke: lightgrey;
+        stroke-opacity: 0.7;
+        shape-rendering: crispEdges;
+        stroke-width: 0;
+    }
+</style>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <link rel="stylesheet" href="./style.css" />
+        <script src="https://d3js.org/d3.v5.min.js" charset="UTF-8"></script>
+        <script src="https://d3js.org/d3-selection-multi.v0.4.min.js"></script>
+        <script
+            src="https://cdnjs.cloudflare.com/ajax/libs/mousetrap/1.4.6/mousetrap.js"
+            charset="utf-8"
+        ></script>
+        <title>Line Chart</title>
+    </head>
+    <body style="background-color: #17191a;">
+        <h1 style="color: white; text-align: center;">
+            Stock Price Prediction on Google $GOOGL
+        </h1>
+
+        <!-- <button type="button" onclick="updateLineChart()">Update Chart</button>
+        <button type="button" onclick="populate_next_day()">
+            Gen Pred Price
+        </button>
+        <button type="button" onclick="updateRealPrice()">
+            Gen Real Price
+        </button> -->
+        <script>
+            // ============ dependencies ================================================
+            async function remote_fetch(file) {
+                const response = await fetch(await file.url());
+                if (!response.ok)
+                    throw new Error(`Unable to load file: ${file.name}`);
+                return response;
+            }
+
+            class FileAttachment {
+                constructor(url, name) {
+                    Object.defineProperties(this, {
+                        _url: { value: url },
+                        name: { value: name, enumerable: true },
+                    });
+                }
+                async url() {
+                    return this._url;
+                }
+                async blob() {
+                    return (await remote_fetch(this)).blob();
+                }
+                async arrayBuffer() {
+                    return (await remote_fetch(this)).arrayBuffer();
+                }
+                async text() {
+                    return (await remote_fetch(this)).text();
+                }
+                async json() {
+                    return (await remote_fetch(this)).json();
+                }
+                async stream() {
+                    return (await remote_fetch(this)).body;
+                }
+                async image() {
+                    const url = await this.url();
+                    return new Promise((resolve, reject) => {
+                        const i = new Image();
+                        if (
+                            new URL(url, document.baseURI).origin !==
+                            new URL(location).origin
+                        ) {
+                            i.crossOrigin = "anonymous";
+                        }
+                        i.onload = () => resolve(i);
+                        i.onerror = () =>
+                            reject(
+                                new Error(`Unable to load file: ${this.name}`)
+                            );
+                        i.src = url;
+                    });
+                }
+            }
+
+            function NoFileAttachments(name) {
+                throw new Error(`File not found: ${name}`);
+            }
+
+            function FileAttachments(resolve) {
+                return (name) => {
+                    const url = resolve((name += "")); // Returns a Promise, string, or null.
+                    if (url == null) throw new Error(`File not found: ${name}`);
+                    return new FileAttachment(url, name);
+                };
+            }
+
+            function resolve(name, base) {
+                if (/^(\w+:)|\/\//i.test(name)) return name;
+                if (/^[.]{0,2}\//i.test(name))
+                    return new URL(name, base == null ? location : base).href;
+                if (!name.length || /^[\s._]/.test(name) || /\s$/.test(name))
+                    throw new Error("illegal name");
+                return "https://unpkg.com/" + name;
+            }
+
+            var count = 0;
+            function domUid(name) {
+                return new Id(
+                    "O-" + (name == null ? "" : name + "-") + ++count
+                );
+            }
+
+            function Id(id) {
+                this.id = id;
+                this.href = new URL(`#${id}`, location) + "";
+            }
+
+            Id.prototype.toString = function () {
+                return "url(" + this.href + ")";
+            };
+
+            var EOL = {},
+                EOF = {},
+                QUOTE = 34,
+                NEWLINE = 10,
+                RETURN = 13;
+
+            function objectConverter(columns) {
+                return new Function(
+                    "d",
+                    "return {" +
+                        columns
+                            .map(function (name, i) {
+                                return (
+                                    JSON.stringify(name) +
+                                    ": d[" +
+                                    i +
+                                    '] || ""'
+                                );
+                            })
+                            .join(",") +
+                        "}"
+                );
+            }
+
+            function customConverter(columns, f) {
+                var object = objectConverter(columns);
+                return function (row, i) {
+                    return f(object(row), i, columns);
+                };
+            }
+
+            // Compute unique columns in order of discovery.
+            function inferColumns(rows) {
+                var columnSet = Object.create(null),
+                    columns = [];
+
+                rows.forEach(function (row) {
+                    for (var column in row) {
+                        if (!(column in columnSet)) {
+                            columns.push((columnSet[column] = column));
+                        }
+                    }
+                });
+
+                return columns;
+            }
+
+            function pad(value, width) {
+                var s = value + "",
+                    length = s.length;
+                return length < width
+                    ? new Array(width - length + 1).join(0) + s
+                    : s;
+            }
+
+            function formatYear(year) {
+                return year < 0
+                    ? "-" + pad(-year, 6)
+                    : year > 9999
+                    ? "+" + pad(year, 6)
+                    : pad(year, 4);
+            }
+
+            function formatDate(date) {
+                var hours = date.getUTCHours(),
+                    minutes = date.getUTCMinutes(),
+                    seconds = date.getUTCSeconds(),
+                    milliseconds = date.getUTCMilliseconds();
+                return isNaN(date)
+                    ? "Invalid Date"
+                    : formatYear(date.getUTCFullYear(), 4) +
+                          "-" +
+                          pad(date.getUTCMonth() + 1, 2) +
+                          "-" +
+                          pad(date.getUTCDate(), 2) +
+                          (milliseconds
+                              ? "T" +
+                                pad(hours, 2) +
+                                ":" +
+                                pad(minutes, 2) +
+                                ":" +
+                                pad(seconds, 2) +
+                                "." +
+                                pad(milliseconds, 3) +
+                                "Z"
+                              : seconds
+                              ? "T" +
+                                pad(hours, 2) +
+                                ":" +
+                                pad(minutes, 2) +
+                                ":" +
+                                pad(seconds, 2) +
+                                "Z"
+                              : minutes || hours
+                              ? "T" +
+                                pad(hours, 2) +
+                                ":" +
+                                pad(minutes, 2) +
+                                "Z"
+                              : "");
+            }
+
+            function dsv(delimiter) {
+                var reFormat = new RegExp('["' + delimiter + "\n\r]"),
+                    DELIMITER = delimiter.charCodeAt(0);
+
+                function parse(text, f) {
+                    var convert,
+                        columns,
+                        rows = parseRows(text, function (row, i) {
+                            if (convert) return convert(row, i - 1);
+                            (columns = row),
+                                (convert = f
+                                    ? customConverter(row, f)
+                                    : objectConverter(row));
+                        });
+                    rows.columns = columns || [];
+                    return rows;
+                }
+
+                function parseRows(text, f) {
+                    var rows = [], // output rows
+                        N = text.length,
+                        I = 0, // current character index
+                        n = 0, // current line number
+                        t, // current token
+                        eof = N <= 0, // current token followed by EOF?
+                        eol = false; // current token followed by EOL?
+
+                    // Strip the trailing newline.
+                    if (text.charCodeAt(N - 1) === NEWLINE) --N;
+                    if (text.charCodeAt(N - 1) === RETURN) --N;
+
+                    function token() {
+                        if (eof) return EOF;
+                        if (eol) return (eol = false), EOL;
+
+                        // Unescape quotes.
+                        var i,
+                            j = I,
+                            c;
+                        if (text.charCodeAt(j) === QUOTE) {
+                            while (
+                                (I++ < N && text.charCodeAt(I) !== QUOTE) ||
+                                text.charCodeAt(++I) === QUOTE
+                            );
+                            if ((i = I) >= N) eof = true;
+                            else if ((c = text.charCodeAt(I++)) === NEWLINE)
+                                eol = true;
+                            else if (c === RETURN) {
+                                eol = true;
+                                if (text.charCodeAt(I) === NEWLINE) ++I;
+                            }
+                            return text.slice(j + 1, i - 1).replace(/""/g, '"');
+                        }
+
+                        // Find next delimiter or newline.
+                        while (I < N) {
+                            if ((c = text.charCodeAt((i = I++))) === NEWLINE)
+                                eol = true;
+                            else if (c === RETURN) {
+                                eol = true;
+                                if (text.charCodeAt(I) === NEWLINE) ++I;
+                            } else if (c !== DELIMITER) continue;
+                            return text.slice(j, i);
+                        }
+
+                        // Return last token before EOF.
+                        return (eof = true), text.slice(j, N);
+                    }
+
+                    while ((t = token()) !== EOF) {
+                        var row = [];
+                        while (t !== EOL && t !== EOF)
+                            row.push(t), (t = token());
+                        if (f && (row = f(row, n++)) == null) continue;
+                        rows.push(row);
+                    }
+
+                    return rows;
+                }
+
+                function preformatBody(rows, columns) {
+                    return rows.map(function (row) {
+                        return columns
+                            .map(function (column) {
+                                return formatValue(row[column]);
+                            })
+                            .join(delimiter);
+                    });
+                }
+
+                function format(rows, columns) {
+                    if (columns == null) columns = inferColumns(rows);
+                    return [columns.map(formatValue).join(delimiter)]
+                        .concat(preformatBody(rows, columns))
+                        .join("\n");
+                }
+
+                function formatBody(rows, columns) {
+                    if (columns == null) columns = inferColumns(rows);
+                    return preformatBody(rows, columns).join("\n");
+                }
+
+                function formatRows(rows) {
+                    return rows.map(formatRow).join("\n");
+                }
+
+                function formatRow(row) {
+                    return row.map(formatValue).join(delimiter);
+                }
+
+                function formatValue(value) {
+                    return value == null
+                        ? ""
+                        : value instanceof Date
+                        ? formatDate(value)
+                        : reFormat.test((value += ""))
+                        ? '"' + value.replace(/"/g, '""') + '"'
+                        : value;
+                }
+
+                return {
+                    parse: parse,
+                    parseRows: parseRows,
+                    format: format,
+                    formatBody: formatBody,
+                    formatRows: formatRows,
+                    formatRow: formatRow,
+                    formatValue: formatValue,
+                };
+            }
+
+            function saveText(text, filename) {
+                var a = document.createElement("a");
+                a.setAttribute(
+                    "href",
+                    "data:text/plain;charset=utf-8," + encodeURIComponent(text)
+                );
+                a.setAttribute("download", filename);
+                a.click();
+            }
+            // =========================================== end of dependencies ======================================
+            // graph
+            // colors[0], colors[1]
+            // let colors = [d3.schemeRdYlBu[3][2], d3.schemeRdYlBu[3][0]];
+            let colors = ["#892b07", "#1b3a4e"];
+            let textColor = "white";
+            let curve = d3.curveStep;
+
+            // scales
+            let margin = { top: 20, right: 20, bottom: 30, left: 30 };
+            let height = 350;
+            let width = 800;
+            let counter = 0; // for even/odd check of enter press
+
+            // endpoints
+            const proxyurl = "http://127.0.0.1:12340/";
+            const feature_api_endpoint = "127.0.0.1:12347/feature_api";
+            const database_api_endpoint = "127.0.0.1:12346/database_api";
+            const xgboost_api_endpoint = "127.0.0.1:12345/xgboost_api";
+            const parseDate = d3.timeParse("%Y%m%d");
+
+            // init data for plot
+            var data;
+            var x, y;
+            var pred_new_price_buffer;
+            var pred_new_date_buffer;
+
+            // init chart
+            var chart = d3
+                .select("body")
+                .append("svg")
+                .attr("viewBox", [0, 0, width, height]);
+            var chartHeight = parseInt(chart.style("height"), 10);
+            var chartWidth = parseInt(chart.style("width"), 10);
+
+            // ========== Cursor Tracker =========================================
+            chart.on("mousemove", function () {
+                // coord mapping
+                var svgX = ((d3.event.pageX - 7) / chartWidth) * width;
+                var svgY = ((d3.event.pageY - 79) / chartHeight) * height;
+                var i =
+                    ((svgX - margin.left - 10) /
+                        (0.9 * width - margin.right - margin.left - 10)) *
+                    149;
+
+                var idx = Math.min(Math.round(i), 150);
+                var cursorX = dayToPixelX(idx) + width / 320;
+                var cursorY; // closest value
+                var real_price = 0;
+                var pred_price = 0;
+                var closestDate = null;
+                var closerToReal = true;
+
+                if (idx < 150) {
+                    real_price = data[idx]["value0"].toFixed(2);
+                    pred_price = data[idx]["value1"].toFixed(2);
+                    real_price_px = priceToPixelY(real_price);
+                    pred_price_px = priceToPixelY(pred_price);
+                    closestDate = data[idx]["date"].toDateString();
+                    closerToReal =
+                        Math.abs(svgY - real_price_px) <
+                        Math.abs(svgY - pred_price_px)
+                            ? true
+                            : false;
+                    cursorY = closerToReal ? real_price_px : pred_price_px;
+                    // console.log(idx, real_price_px, pred_price_px, svgY);
+                } else {
+                    cursorY =
+                        pred_new_price_buffer === null
+                            ? -100
+                            : priceToPixelY(pred_new_price_buffer);
+                    closerToReal = false;
+                    pred_price = pred_new_price_buffer.toFixed(2);
+                    closestDate = "Next Opening Day";
+                }
+                // keep one cursor tracker only
+                chart.select("#cursorCircle").remove();
+                chart.select("#floatingBox").remove();
+                chart.selectAll(".textFloatingBox").remove();
+
+                // display cursor within threshold 50
+                if (Math.abs(svgY - cursorY) < 50) {
+                    if (idx < 150) {
+                        chart
+                            .append("circle")
+                            .attr("id", "cursorCircle")
+                            .attr("cx", cursorX)
+                            .attr("cy", cursorY)
+                            .attr("r", 3)
+                            .attr("stroke", textColor)
+                            .attr("fill", "none");
+                    }
+
+                    // add floating box to display details
+                    var displayDate = closerToReal
+                        ? "Date: " + closestDate
+                        : "Date: " + closestDate;
+                    var displayPrice = closerToReal
+                        ? "Real Price: " + real_price
+                        : "Pred Price: " + pred_price;
+                    var floatBoxHeight = 30;
+                    var floatBoxWidth = 110;
+                    var xOffset = cursorX < 0.8 * width ? 0 : floatBoxWidth;
+                    var yOffset =
+                        cursorY > 2 * floatBoxHeight ? 0 : floatBoxHeight;
+                    chart
+                        .append("rect")
+                        .attr("id", "floatingBox")
+                        .attr("x", cursorX + 10 - xOffset)
+                        .attr("y", cursorY - 40 + yOffset)
+                        .attr("width", floatBoxWidth)
+                        .attr("height", floatBoxHeight)
+                        .attr("fill", "black");
+                    chart
+                        .append("text")
+                        .attr("class", "textFloatingBox")
+                        .attr("x", cursorX + 15 - xOffset)
+                        .attr("y", cursorY - 28 + yOffset)
+                        .attr("fill", textColor)
+                        .attr("font-size", "10px")
+                        .text(displayDate);
+                    chart
+                        .append("text")
+                        .attr("class", "textFloatingBox")
+                        .attr("x", cursorX + 15 - xOffset)
+                        .attr("y", cursorY - 15 + yOffset)
+                        .attr("fill", textColor)
+                        .attr("font-size", "10px")
+                        .text(displayPrice);
+                }
+            });
+            // ==================================== end of Cursor Tracker ===============
+
+            function make_y_gridlines() {
+                return d3.axisLeft(y).ticks(5);
+            }
+
+            // convertion from price to pixel for y
+            function priceToPixelY(price) {
+                var yAxisLow = y.domain()[0];
+                var yAxisHigh = y.domain()[1];
+                return (
+                    ((height - margin.top - margin.bottom) *
+                        (yAxisHigh - price)) /
+                        (yAxisHigh - yAxisLow) +
+                    margin.top
+                );
+            }
+
+            // convertion from day i to pixel for x
+            function dayToPixelX(i) {
+                return (
+                    (i * (0.9 * width - margin.left - margin.right - 10)) /
+                        149 +
+                    margin.left +
+                    10
+                );
+            }
+
+            // ========= keyboard press helper functions ==========================
+            Mousetrap.bind("p", function (e, n) {
+                populate_next_day();
+            });
+
+            Mousetrap.bind("r", function (e, n) {
+                updateRealPrice();
+            });
+
+            Mousetrap.bind("u", function (e, n) {
+                updateLineChart();
+            });
+
+            Mousetrap.bind("enter", function (e, n) {
+                // counter even -> populate_next_day + updateLineChart
+                // counter odd -> updateRealPrice + updateLineChart
+                console.log(counter);
+                counter & 1 ? odd() : even();
+                counter = counter + 1;
+            });
+
+            function even() {
+                populate_next_day();
+                setTimeout(function () {
+                    updateLineChart();
+                }, 200);
+            }
+
+            function odd() {
+                updateRealPrice();
+                setTimeout(function () {
+                    updateLineChart();
+                }, 200);
+            }
+            // ======================================= end of: keyboard press =============
+
+            function updateRealPrice() {
+                // push the database api to update real price
+                fetch(proxyurl + database_api_endpoint + "/next_real_price")
+                    .then((response) => response.text())
+                    .then((text) => {
+                        console.log(text);
+                    })
+                    .catch((error) => {
+                        console.log(error, "when posting: next_real_price");
+                    }); // end of POST next_real_price
+            }
+
+            function updateLineChart() {
+                fetch(proxyurl + database_api_endpoint + "/real_pred_150d")
+                    .then((response) => response.text())
+                    .then((text) => {
+                        data = JSON.parse(text).map((d) => {
+                            return {
+                                date: parseDate(d.date.replace(/[-]/g, "")),
+                                value0: +d["value0"], // The Real Stock Price - whiteline
+                                value1: +d["value1"], // The Predicted Stock Price - blue/red bar
+                            };
+                        });
+                        // console.log(data);
+
+                        x = d3
+                            .scaleTime()
+                            .domain(d3.extent(data, (d) => d.date))
+                            .range([
+                                margin.left + 10,
+                                0.9 * width - margin.right,
+                            ]);
+                        y = d3
+                            .scaleLinear()
+                            .domain([
+                                d3.min(data, (d) =>
+                                    Math.min(d.value0, d.value1)
+                                ),
+                                d3.max(data, (d) =>
+                                    Math.max(d.value0, d.value1)
+                                ),
+                            ])
+                            .nice(5)
+                            .range([height - margin.bottom, margin.top]);
+                        xAxis = (g) =>
+                            g
+                                .attr(
+                                    "transform",
+                                    `translate(0,${height - margin.bottom})`
+                                )
+                                .attr("class", "axisTick")
+                                .call(
+                                    d3
+                                        .axisBottom(x)
+                                        .ticks(width / 80)
+                                        .tickSizeOuter(0)
+                                )
+                                .call((g) => g.select(".domain").remove());
+                        yAxis = (g) =>
+                            g
+                                .append("g")
+                                .attr(
+                                    "transform",
+                                    `translate(${margin.left + 10},0)`
+                                )
+                                .attr("class", "axisTick")
+                                .call(d3.axisLeft(y))
+                                .call((g) => g.select(".domain").remove())
+                                .call((g) =>
+                                    g
+                                        .select(".tick:last-of-type text")
+                                        .clone()
+                                        .attr("x", 3)
+                                        .attr("text-anchor", "start")
+                                        .attr("font-weight", "bold")
+
+                                        .text(data.y)
+                                );
+
+                        const aboveUid = domUid("above");
+                        const belowUid = domUid("below");
+
+                        // insert data
+                        // TODO: use selector more accurately, so that I don't have to draw legend every time
+                        chart.selectAll("*").remove();
+                        chart.datum(data);
+
+                        // generate x and y axis
+                        chart.append("g").call(xAxis);
+                        chart.append("g").call(yAxis);
+
+                        chart
+                            .append("clipPath")
+                            .attr("id", aboveUid.id)
+                            .append("path")
+                            .attr(
+                                "d",
+                                d3
+                                    .area()
+                                    .curve(curve)
+                                    .x((d) => x(d.date))
+                                    .y0(0)
+                                    .y1((d) => y(d.value1))
+                            );
+
+                        chart
+                            .append("clipPath")
+                            .attr("id", belowUid.id)
+                            .append("path")
+                            .attr(
+                                "d",
+                                d3
+                                    .area()
+                                    .curve(curve)
+                                    .x((d) => x(d.date))
+                                    .y0(height)
+                                    .y1((d) => y(d.value1))
+                            );
+
+                        // generate error bars lower than baseline
+                        chart
+                            .append("path")
+                            .attr("clip-path", aboveUid)
+                            .attr("fill", colors[1])
+                            .attr(
+                                "d",
+                                d3
+                                    .area()
+                                    .curve(curve)
+                                    .x((d) => x(d.date))
+                                    .y0(height)
+                                    .y1((d) => y(d.value0))
+                            );
+
+                        // generate error bars higher than baseline
+                        chart
+                            .append("path")
+                            .attr("clip-path", belowUid)
+                            .attr("fill", colors[0])
+                            .attr(
+                                "d",
+                                d3
+                                    .area()
+                                    .curve(curve)
+                                    .x((d) => x(d.date))
+                                    .y0(0)
+                                    .y1((d) => y(d.value0))
+                            );
+
+                        // generate baseline - whiteline
+                        chart
+                            .append("path")
+                            .attr("fill", "none")
+                            .attr("stroke", textColor)
+                            .attr("stroke-width", 1.5)
+                            .attr("stroke-linejoin", "round")
+                            .attr("stroke-linecap", "round")
+                            .attr(
+                                "d",
+                                d3
+                                    .line()
+                                    .curve(curve)
+                                    .x((d) => x(d.date))
+                                    .y((d) => y(d.value0))
+                            );
+
+                        // add horizontal grid lines
+
+                        // const numberOfTicks = 12;
+                        // var yAxisGrid = d3
+                        //     .axisRight()
+                        //     .scale(y)
+                        //     .ticks(numberOfTicks)
+                        //     .tickSize(width, 0)
+                        //     .tickFormat("");
+                        // chart
+                        //     .append("g")
+                        //     .classed("y", true)
+                        //     .classed("axis", true)
+                        //     .call(yAxisGrid);
+
+                        // draw predicted new price
+                        fetch(
+                            proxyurl + database_api_endpoint + "/pred_new_price"
+                        )
+                            .then((response) => response.text())
+                            .then((text) => {
+                                var real_prev_price =
+                                    data[data.length - 1]["value0"];
+                                var pred_new_price = JSON.parse(text);
+
+                                pred_new_price_buffer = pred_new_price;
+                                console.log(
+                                    "pred_new_price = ",
+                                    pred_new_price
+                                );
+                                var yAxisLow = y.domain()[0];
+                                var yAxisHigh = y.domain()[1];
+
+                                if (pred_new_price !== null) {
+                                    // compute predicted new price pixel location according to canvas size
+                                    var real_new_price_x =
+                                        0.9 * width - margin.right;
+                                    var real_prev_price_y =
+                                        ((height - margin.top - margin.bottom) *
+                                            (yAxisHigh - real_prev_price)) /
+                                            (yAxisHigh - yAxisLow) +
+                                        margin.top;
+                                    var pred_new_price_x =
+                                        (150 *
+                                            (0.9 * width -
+                                                margin.left -
+                                                margin.right)) /
+                                            149 +
+                                        margin.left +
+                                        10;
+                                    var pred_new_price_y =
+                                        ((height - margin.top - margin.bottom) *
+                                            (yAxisHigh - pred_new_price)) /
+                                            (yAxisHigh - yAxisLow) +
+                                        margin.top;
+
+                                    chart
+                                        .append("line")
+                                        .classed("blinking", true)
+                                        .attr("x1", real_new_price_x)
+                                        .attr("y1", real_prev_price_y)
+                                        .attr("x2", pred_new_price_x)
+                                        .attr("y2", pred_new_price_y)
+                                        .attr("fill", "none")
+                                        .attr("stroke-width", 2)
+                                        .attr("stroke", "orange")
+                                        .style("stroke-dasharray", "1, 1");
+                                    var circle = chart
+                                        .append("circle")
+                                        .classed("blinking", true)
+                                        .attr("cx", pred_new_price_x)
+                                        .attr("cy", pred_new_price_y)
+                                        .attr("r", 3)
+                                        .attr("fill", "orange");
+                                }
+                            })
+                            .catch((error) => {
+                                console.log(
+                                    error,
+                                    "when fetching: pred_new_price"
+                                );
+                            }); // end of GET pred_new_price
+
+                        // ========= Legend ==========================================
+                        chart
+                            .append("line")
+                            .attr("x1", 188)
+                            .attr("y1", 10)
+                            .attr("x2", 192)
+                            .attr("y2", 10)
+                            .attr("stroke", textColor);
+                        // chart
+                        //     .append("circle")
+                        //     .attr("cx", 190) // 200, 130
+                        //     .attr("cy", 10)
+                        //     .attr("r", 3)
+                        //     .style("fill", "#69b3a2");
+                        chart
+                            .append("rect")
+                            .attr("x", 300) // 200, 160
+                            .attr("y", 7)
+                            .attr("width", 6)
+                            .attr("height", 6)
+                            .style("fill", colors[0]); // colors[0] -> blue
+                        chart
+                            .append("rect")
+                            .attr("x", 400) // 200, 160
+                            .attr("y", 7)
+                            .attr("width", 6)
+                            .attr("height", 6)
+                            .style("fill", colors[1]); // colors[0] -> blue
+                        chart
+                            .append("circle")
+                            .attr("cx", 500) // 200, 160
+                            .attr("cy", 10)
+                            .attr("r", 3)
+                            .style("fill", "orange");
+                        chart
+                            .append("text")
+                            .attr("x", 200)
+                            .attr("y", 10)
+                            .text("real price (baseline)")
+                            .style("font-size", "10px")
+                            .attr("alignment-baseline", "middle")
+                            .attr("fill", textColor);
+                        chart
+                            .append("text")
+                            .attr("x", 310)
+                            .attr("y", 10)
+                            .text("positive error")
+                            .style("font-size", "10px")
+                            .attr("alignment-baseline", "middle")
+                            .attr("fill", textColor);
+                        chart
+                            .append("text")
+                            .attr("x", 410)
+                            .attr("y", 10)
+                            .text("negative error")
+                            .style("font-size", "10px")
+                            .attr("alignment-baseline", "middle")
+                            .attr("fill", textColor);
+                        chart
+                            .append("text")
+                            .attr("x", 510)
+                            .attr("y", 10)
+                            .text("next predicted price")
+                            .style("font-size", "10px")
+                            .attr("alignment-baseline", "middle")
+                            .attr("fill", textColor);
+                        // ==================================== end of Legend ===============
+                    })
+                    .catch((error) => {
+                        console.log(error, "when fetching: real_pred_150d");
+                    }); // end of GET real_pred_150d
+            } // end of updateLineChart
+
+            function populate_next_day() {
+                // push the database api to update the next set of pred price
+                fetch(proxyurl + database_api_endpoint + "/next_day", {
+                    method: "POST",
+                })
+                    .then((response) => response.text())
+                    .then((text) => {
+                        console.log(text);
+                    })
+                    .catch((error) => {
+                        console.log(error, "when posting: next_day");
+                    }); // end of POST next_day
+            }
+
+            updateLineChart();
+        </script>
+    </body>
+</html>
