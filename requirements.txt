@@ -44,7 +44,7 @@ cssselect==1.1.0
 cycler==0.10.0
 Cython==0.29.15
 cytoolz==0.10.1
-dask==2.10.1
+dask==2021.10.0
 decorator==4.4.1
 defusedxml==0.6.0
 demoji==0.1.5
