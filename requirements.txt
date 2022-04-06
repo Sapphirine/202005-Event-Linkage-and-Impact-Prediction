@@ -247,7 +247,7 @@ tqdm==4.45.0
 traitlets==4.3.3
 tweepy==3.8.0
 -e git+https://github.com/twintproject/twint.git@8cec66a256940d3daf9a9d34a5da8a61f26fe165#egg=twint
-Twisted==19.10.0
+Twisted==22.2.0
 typed-ast==1.4.1
 typing==3.7.4.1
 typing-extensions==3.7.4.1
