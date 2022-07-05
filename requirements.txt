@@ -162,7 +162,7 @@ py==1.8.1
 py-googletrans==1.2
 pyasn1==0.4.8
 pyasn1-modules==0.2.7
-pycares==3.1.1
+pycares==4.2.0
 pycld2==0.41
 pycodestyle==2.5.0
 pycosat==0.6.3
