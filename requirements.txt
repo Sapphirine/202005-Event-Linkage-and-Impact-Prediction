@@ -122,7 +122,7 @@ mpmath==1.1.0
 msgpack==0.6.1
 multidict==4.7.5
 multipledispatch==0.6.0
-nbconvert==5.6.1
+nbconvert==6.3.0
 nbformat==5.0.4
 nest-asyncio==1.2.3
 networkx==2.4
